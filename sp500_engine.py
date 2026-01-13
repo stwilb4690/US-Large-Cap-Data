@@ -141,7 +141,8 @@ class EODHDClient:
         self._rate_limit_reset = time.time() + 60
         self._request_count = 0
         self._last_request_time = 0
-        self._min_request_interval = 0.1  # 100ms between requests
+        self._last_request_time = 0
+        self._min_request_interval = 1.0  # 1s between requests to be safe
 
     def _get_cache_key(self, endpoint: str, params: Dict) -> str:
         """Generate a cache key for an API request."""
@@ -207,7 +208,7 @@ class EODHDClient:
         for attempt in range(retries):
             try:
                 self._rate_limit()
-                response = requests.get(url, params=params, timeout=30)
+                response = requests.get(url, params=params, timeout=60)
 
                 # Handle rate limiting
                 if response.status_code == 429:
@@ -227,6 +228,11 @@ class EODHDClient:
                     time.sleep(2 ** attempt)
 
             except requests.exceptions.RequestException as e:
+                # Fail fast on 404 (Not Found) - do not retry
+                if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 404:
+                    print(f"Warning: Endpoint not found (404): {url}")
+                    return None
+                
                 print(f"Request error on attempt {attempt + 1}/{retries}: {e}")
                 if attempt < retries - 1:
                     time.sleep(2 ** attempt)
@@ -561,8 +567,11 @@ class SP500HybridEngine:
             return self._change_events_cache
 
         data = self._client.get_index_changes()
-        events = []
+        if not data:
+            print("Warning: No historical changes found (or API returned 404). Method B (Backward Roll) will be effectively disabled.")
+            return []
 
+        events = []
         for event in data:
             events.append(ChangeEvent(
                 date=event.get("Date", ""),

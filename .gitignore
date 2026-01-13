@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Data output
+sp500_reconstruction_output.json
+
+# Temporary scripts
+test_api.py
